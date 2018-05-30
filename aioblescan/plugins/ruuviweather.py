@@ -79,12 +79,39 @@ class RuuviWeather(object):
                     result["accelerometer"]=(dx,dy,dz,length)
                     result["voltage"]=int.from_bytes(val[12:14],"big")
                     return result
-
+                elif val[0]==0x99 and val[1]==0x04 and val[2]==0x05:
+                    #Looks just right
+                    result["mac address"]=packet.retrieve("peer")[0].val
+                    val=val[2:]
+                    result["temperature"]="{:.1f}".format(int.from_bytes(val[1:3],"big",signed=True)*0.005)
+                    result["humidity"]="{:.1f}".format(int.from_bytes(val[3:5],"big")*0.0025)
+                    result["pressure"]=int.from_bytes(val[5:7],"big")+50000
+                    dx=int.from_bytes(val[7:9],"big",signed=True)
+                    dy=int.from_bytes(val[9:11],"big",signed=True)
+                    dz=int.from_bytes(val[11:13],"big",signed=True)
+                    length="{:.1f}".format(sqrt(dx**2 + dy**2 + dz**2))
+                    result["accelerometer"]=(dx,dy,dz,length)
+                    p = int.from_bytes(val[13:15],"big")
+                    result["voltage"]= 1600 + (p >> (16 - 11))   #power bat (1st 11bits (so shift 5 places right) of p (unsigned) mV over 1600) (1.6V to 3.647V range)
+                    result["tx"]=       -40 + ((p & 31)*2)       #power tx  (last 5 bits (31 = 11111 for bitwise and) of p (unsigned) dBm over -40 in 2dBm steps (-40 - +24)
+                    result["movement"]=val[15]
+                    result["sequence"]=int.from_bytes(val[16:18],"big")
+                    #result["payloadmac"]=val[18:24]             #FIXME(maybe, for completeness)
+                    return result
+                elif val[0]==0x99 and val[1]==0x04:
+                    #BLE Manufacturer specific data + Ruuvi manufacturer ID
+                    #But not a known data/packet type.
+#                    print("{Unknown Ruuvi Data Format}")
+                    return None
+                else:
+#                    print("{Unknown BLE Manufacturer specific data}")
+                    return None
             else:
                 return None
         power=packet.retrieve("tx_power")
         if power:
             result["tx_power"]=power[-1].val
+#        print(url["url"])
         try:
             if "//ruu.vi/" in url["url"]:
                 #We got a live one
@@ -116,6 +143,7 @@ class RuuviWeather(object):
                     result["voltage"]=int.from_bytes(val[12:14],"big")
                     return result
         except:
+#            print("Unknown URL",url)
             print ("\n\nurl oops....")
             packet.show()
         return None
